@@ -1,0 +1,11 @@
+*.pyc
+.DS_Store
+.vscode/
+
+/temp/
+*.csv
+*.txt
+/train_instances/
+/test_instances/
+*.npy
+/models/
