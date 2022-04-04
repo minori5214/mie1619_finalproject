@@ -13,9 +13,10 @@ skip_list = ["brd14051.tsp", "d15112.tsp", "d18512.tsp",
             "pla33810.tsp", "pla7397.tsp", "pla85900.tsp",
             "rl5915.tsp", "rl5934.tsp"]
 
-too_large = ["fl3795.tsp", "fnl4461.tsp", "pcb3038.tsp"] # size > 3000 is omitted for the first report
+#too_large = ["fl3795.tsp", "fnl4461.tsp", "pcb3038.tsp"] # size > 3000 is omitted for the first report
+too_large = []
 
-def solve_all(dir, time_limit=300, save_to_csv=True):
+def solve_all(dir, time_limit=None, save_to_csv=True):
     if save_to_csv:
         with open('output_{}.csv'.format('MIP'), 'a') as f:
             f.write('Model, Instance, NumConstr, Status, Opt_Cost, Solve_time, Cur_best' + '\n')
@@ -29,7 +30,10 @@ def solve_all(dir, time_limit=300, save_to_csv=True):
             mip = MIP(os.path.join(dir, file), verbose=0)
 
             mip.build()
-            result = mip.solve(time_limit=time_limit)
+            if time_limit is not None:
+                result = mip.solve(time_limit=time_limit)
+            else:
+                result = mip.solve()
 
             NumConstrs = result.statistics['NumConstrs']
             solve_time = result.statistics['solve_time']
@@ -47,4 +51,4 @@ def solve_all(dir, time_limit=300, save_to_csv=True):
                     )
 
 if __name__ == "__main__":
-    solve_all("instances", time_limit=300)
+    solve_all("instances")
