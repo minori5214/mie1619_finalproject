@@ -5,7 +5,12 @@ from adaptive_lns_v3 import ALNS_Agent
 
 
 class Pcost_min():
-    def __init__(self, algo_names=['MIP', 'CP', 'ALNS'], time_horizon=3, t=15, T=300):
+    def __init__(self, algo_names=['MIP', 'CP', 'ALNS'], t=15, T=300):
+        """
+        t (int): total given prediction time
+        T (int): total given time time
+
+        """
         
         self.algo_names = algo_names
         self.t = t
@@ -27,7 +32,7 @@ class Pcost_min():
         # For each algorithm, run for t seconds
         for algo in self.base:
             self.base[algo].build()
-            result = self.base[algo].solve(time_limit=self.t)
+            result = self.base[algo].solve(time_limit=self.t // len(self.base))
             pcost[algo] = result.objVal
 
         # Choose the algorithm
@@ -36,7 +41,7 @@ class Pcost_min():
         #print(best_algo, "is selected")
 
         # Run the selected algorithm for T-t*num(algo) seconds
-        remain = self.T-self.t*3
+        remain = self.T-self.t
         result = self.base[best_algo].resume(time_limit=remain)
 
         objVal = result.objVal
@@ -47,7 +52,7 @@ class Pcost_min():
             solve_time = remain
             status = 9
 
-        return objVal, solve_time+self.t*3, status, best_algo
+        return objVal, solve_time+self.t, status, best_algo
 
 
 if __name__ == "__main__":

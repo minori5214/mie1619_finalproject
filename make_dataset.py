@@ -8,6 +8,8 @@ import csv
 import numpy as np
 from copy import copy
 
+skip_list = ['d1655.tsp', 'd2103.tsp', 'fl3795.tsp'] # CP cannot solve
+
 def make_raw_data(dir, delta_t=5, T=300, save_to_csv=True, model_name='MIP'):
     """
     Solve all the instances in 'dir' with the model ('model_name'), and
@@ -22,6 +24,8 @@ def make_raw_data(dir, delta_t=5, T=300, save_to_csv=True, model_name='MIP'):
             f.write('Model, Instance, t, objVal, Status' + '\n')
 
     for file in os.listdir(dir):
+        if file in skip_list:
+            continue
         print("file name: ", file)
         t = 0
         status = 9
@@ -41,7 +45,7 @@ def make_raw_data(dir, delta_t=5, T=300, save_to_csv=True, model_name='MIP'):
                 result = model.solve(time_limit=delta_t)
             else:
                 # Resume optimization
-                result = model.resume(time_limit=delta_t)
+                result = model.resume(time_limit=delta_t, tour=result.tour)
 
             # Retrieve the result
             objVal = result.objVal
@@ -187,8 +191,131 @@ def make_dataset(delta_t, T, time_horizon=3):
 
     print("Dataset complete", X_train.shape, y_train.shape)
 
+
+def make_dataset_rnn_switching(delta_t, T, time_horizon=3, t=20):
+    """
+    delta_t (int)     : time interval when the performance is measured 
+                        (used for detecting the raw data csv filename)
+    T (int)           : total time
+    time_horizon (int): number of time-steps used for prediction
+    t (int)           : time interval when rnn predicts the next cost improvement
+
+    """
+
+    assert (int(t/delta_t) - t/delta_t) < 0.00001, "t must be a multiple of delta_t"
+    
+    num_algos = 3 # MIP, CP, ALNS
+
+    csv_mip = open('rawdata_MIP_t{}_T{}.csv'.format(delta_t, T), "r")
+    f = csv.reader(csv_mip, delimiter=",", doublequote=True, lineterminator="\r\n", quotechar='"', skipinitialspace=True)
+    next(f)
+    mip_result = []
+    for row in f:
+        # row[1]: instance, [2]: time, [3]: objVal, [4]: status
+        mip_result.append((row[1], 
+                        float(row[2]), 
+                        float(row[3]), 
+                        int(row[4]))
+                    )
+
+    csv_cp = open('rawdata_CP_t{}_T{}.csv'.format(delta_t, T), "r")
+    f = csv.reader(csv_cp, delimiter=",", doublequote=True, lineterminator="\r\n", quotechar='"', skipinitialspace=True)
+    next(f)
+    cp_result = []
+    for row in f:
+        cp_result.append((row[1], 
+                        float(row[2]), 
+                        float(row[3]), 
+                        int(row[4]))
+                    )
+
+    csv_alns = open('rawdata_ALNS_t{}_T{}.csv'.format(delta_t, T), "r")
+    f = csv.reader(csv_alns, delimiter=",", doublequote=True, lineterminator="\r\n", quotechar='"', skipinitialspace=True)
+    next(f)
+    alns_result = []
+    for row in f:
+        alns_result.append((row[1], 
+                        float(row[2]), 
+                        float(row[3]), 
+                        int(row[4]))
+                    )
+
+    step = int(t / delta_t)    
+    ps_all = []
+    ps = []
+    queue = [] # temp queue that stores part of objective func values
+
+    m_2, c_2, a_2 = float('inf'), float('inf'), float('inf')
+    m = mip_result.pop(0)
+    c = cp_result.pop(0)
+    a = alns_result.pop(0)
+    non_nan_maxima = max([x for x in [m[2], c[2], a[2]] if x != float('inf')])
+    while len(mip_result) > 0 or len(cp_result) > 0 or len(alns_result) > 0:
+        # Add ith objective values to queue
+        if len(queue) >= step + 1:
+            queue.pop(0)
+        item = [m[2], c[2], a[2]]
+        print(m[0], item)
+        queue.append([x if x != float('inf') else non_nan_maxima for x in item])
+
+        # if queue is full, add cost improvement to ps
+        if len(queue) == step + 1:
+            cost_i = list(queue[0])
+            cost_next = list(queue[-1])
+
+            p = [cost_i[j]-cost_next[j] for j in range(len(cost_i))]
+            ps.append(p)
+
+        # if all the methods reached optimality or time limit, go to the next instance
+        if (m[3] == 2 and c[3] == 2 and a[3] == 2) or (max(m[1], c[1], a[1]) > T-delta_t):
+            ps_all.append(ps)
+
+            m_2, c_2, a_2 = float('inf'), float('inf'), float('inf')
+            m = mip_result.pop(0)
+            c = cp_result.pop(0)
+            a = alns_result.pop(0)
+            non_nan_maxima = max([x for x in [m[2], c[2], a[2]] if x != float('inf')])
+        else:
+            if m[3] !=2: m = mip_result.pop(0)
+            else: m_2 = min(m_2, m[1])
+
+            if c[3] !=2: c = cp_result.pop(0)
+            else: c_2 = min(c_2, c[1])
+
+            if a[3] !=2: a = alns_result.pop(0)
+            else: c_2 = min(c_2, c[1])
+    
+    print(ps)
+
+    Xs = []
+    ys = []
+    for ps in ps_all:
+        # If there is not enough data, skip the instance
+        if len(ps)-step*time_horizon <= 0:
+            continue
+
+        for i in range(len(ps)-step*time_horizon):
+            X = []
+            for j in range(time_horizon):
+                X.append(ps[i+step*j])
+            Xs.append(X)
+            ys.append(ps[i+step*time_horizon])
+
+    Xs = np.array(Xs)
+    ys = np.array(ys)
+
+    np.save('X_rnn_delta{}_t{}_T{}_h{}.npy'.format(delta_t, t, T, time_horizon), Xs)
+    np.save('y_rnn_delta{}_t{}_T{}_h{}.npy'.format(delta_t, t, T, time_horizon), ys)
+
+    np.load('X_rnn_delta{}_t{}_T{}_h{}.npy'.format(delta_t, t, T, time_horizon))
+    np.load('y_rnn_delta{}_t{}_T{}_h{}.npy'.format(delta_t, t, T, time_horizon))
+
+    print("Dataset complete", Xs.shape, ys.shape)
+
+
 if __name__ == "__main__":
-    #make_raw_data("instances_solvable_2", delta_t=5, T=300, model_name='MIP')
-    #make_raw_data("instances_solvable_2", delta_t=5, T=300, model_name='CP')
-    #make_raw_data("instances_solvable_2", delta_t=5, T=300, model_name='ALNS')
-    make_dataset(delta_t=5, T=300, time_horizon=3)
+    #make_raw_data("train_instances_final", delta_t=5, T=600, model_name='MIP')
+    #make_raw_data("train_instances_final", delta_t=5, T=600, model_name='CP')
+    make_raw_data("train_instances_final", delta_t=5, T=600, model_name='ALNS')
+    #make_dataset(delta_t=5, T=600, time_horizon=3)
+    #make_dataset_rnn_switching(delta_t=5, t=20, T=600, time_horizon=3)

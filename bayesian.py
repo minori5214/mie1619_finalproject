@@ -6,17 +6,22 @@ from sklearn.naive_bayes import GaussianNB
 import numpy as np
 
 class Bayesian():
-    def __init__(self, algo_names=['MIP', 'CP', 'ALNS'], delta_t=5, time_horizon=3, T=300):
+    def __init__(self, algo_names=['MIP', 'CP', 'ALNS'], t=90, time_horizon=3, delta_t=10, T=300):
         """
         It solves the instance for "delta_t * time_horizon" [sec] by each method.
         Performance metric at each delta_t [sec] is recorded and then used for 
         determining the algorithm to use for the rest "T-delta_t*time_horizon*num(algorithms)" [sec]. 
+
+        t (int)  : total given prediction time
+        time_horizon (int): number of time steps that an algorithm is run for prediction
+
         
         """
         self.algo_names = algo_names
-        self.delta_t = delta_t
+        self.t = t
         self.time_horizon = time_horizon
         self.T = T
+        self.delta_t = delta_t
 
         self.model = GaussianNB()
     
@@ -28,14 +33,17 @@ class Bayesian():
         k = 0
         if 'MIP' in self.algo_names:
             self.base['MIP'] = MIP(instance_path, verbose=0)
+            self.base['MIP'].build()
             self.base_id[k] = 'MIP'
             k += 1
         if 'CP' in self.algo_names:
             self.base['CP'] = CP(instance_path, verbose=0)
+            self.base['CP'].build()
             self.base_id[k] = 'CP'
             k += 1
         if 'ALNS' in self.algo_names:
             self.base['ALNS'] = ALNS_Agent(instance_path, verbose=0)
+            self.base['ALNS'].build()
             self.base_id[k] = 'ALNS'
 
 
@@ -46,8 +54,6 @@ class Bayesian():
             # For each algorithm, run for delta_t seconds
             for algo in self.base:
                 if i == 0:
-                    # If first time, build and solve
-                    self.base[algo].build()
                     result = self.base[algo].solve(time_limit=self.delta_t)
                 else:
                     # From the second time, just resume optimization

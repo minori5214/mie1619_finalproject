@@ -1,3 +1,4 @@
+import statistics
 from ALNS.alns import ALNS, State
 from ALNS.alns.criteria import HillClimbing, SimulatedAnnealing
 
@@ -261,6 +262,7 @@ class ALNS_Agent():
 
         self.random_state = np.random.RandomState(SEED)
         self.initial_solution = self.greedy_repair(self.state, self.random_state)
+
         #print("Initial solution objective is {0}.".format(self.initial_solution.objective()))
 
         self.alns = ALNS(self.random_state)
@@ -271,26 +273,49 @@ class ALNS_Agent():
 
         self.alns.add_repair_operator(self.greedy_repair)
     
-    def solve(self, time_limit=10):
+    def solve(self, time_limit=10, tour=None):
+        if tour is not None:
+            self.solution_sharing(tour)
+
         result = self.alns.iterate(self.initial_solution, [3, 2, 1, 0.5], 0.8, self.criterion,
                       iterations=5000, collect_stats=True, time_limit=time_limit)
         self.cur_state = result.best_state
 
-        return Result(self.cur_state.objective(), {'solution': deepcopy(self.cur_state)})
-        #return result
+        nodes = self.cur_state.nodes
+        edges = self.cur_state.edges
+        tour = []
+        i = 1
+        tour.append(i-1)
+        while len(tour) < len(nodes):
+            j = edges[nodes[i-1]][0]
+            tour.append(j-1)
+            i = j
+        
+        statistics = {'solution': deepcopy(self.cur_state), 
+                        'status': 9, 
+                        'solve_time': time_limit}
+
+        return Result(self.cur_state.objective(), statistics, tour)
     
-    def resume(self, time_limit=10):
-        self.initial_solution = self.cur_state
-        return self.solve(time_limit=time_limit)
+    def resume(self, time_limit=10, tour=None):
+        return self.solve(time_limit=time_limit, tour=tour)
+
+    def solution_sharing(self, tour):
+        edges = {}
+        for i in range(len(tour)-1):
+            edges[self.initial_solution.nodes[tour[i]]] = self.initial_solution.nodes[tour[i+1]]
+        edges[self.initial_solution.nodes[tour[-1]]] = self.initial_solution.nodes[tour[0]]
+        self.initial_solution.edges = edges
+
 
 if __name__ == "__main__":
-    alns_agent = ALNS_Agent('./instances/bays29.tsp')
+    alns_agent = ALNS_Agent('./instances/ali535.tsp')
     #alns_agent.instance.optimal_tour('./instances/xqf131.opt.tour')
 
     alns_agent.build()
-    result = alns_agent.solve(time_limit=3)
+    result = alns_agent.solve(time_limit=10)
 
-    solution = result.best_state
+    solution = result.statistics['solution']
     #print("solution: ", solution)
 
     objective = solution.objective()
@@ -299,10 +324,26 @@ if __name__ == "__main__":
     #print('This is {0:.1f}% worse than the optimal solution, which is {1}.'
     #      .format(100 * (objective - optimal) / optimal, optimal))
 
-    #result = alns_agent.resume(solution, time_limit=3)
-    #solution = result.best_state
-    #objective = solution.objective()
-    #print('Best heuristic objective is {0}.'.format(objective))
+    result = alns_agent.resume(time_limit=5, tour=result.tour)
+    solution = result.statistics['solution']
+    objective = solution.objective()
+    print('Best heuristic objective is {0}.'.format(objective))
+
+    result = alns_agent.resume(time_limit=5, tour=result.tour)
+    solution = result.statistics['solution']
+    objective = solution.objective()
+    print('Best heuristic objective is {0}.'.format(objective))
+
+    result = alns_agent.resume(time_limit=5, tour=result.tour)
+    solution = result.statistics['solution']
+    objective = solution.objective()
+    print('Best heuristic objective is {0}.'.format(objective))
+
+    result = alns_agent.resume(time_limit=5, tour=result.tour)
+    solution = result.statistics['solution']
+    objective = solution.objective()
+    print('Best heuristic objective is {0}.'.format(objective))
+
 
     #result = alns_agent.resume(solution, time_limit=3)
     #solution = result.best_state

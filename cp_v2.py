@@ -8,6 +8,8 @@ from docplex.cp.parameters import CpoParameters
 from instance import Instance_CP
 from result import Result
 
+import numpy as np
+
 class CP():
     def __init__(self, instance_path, verbose=1):
         self.instance_path = instance_path
@@ -35,9 +37,12 @@ class CP():
 
         self.build_complete = 1
     
-    def solve(self, time_limit=None):
+    def solve(self, time_limit=None, tour=None):
         assert self.build_complete == 1, \
             "Model is not initialized yet. Run MIP.build() first."
+
+        if tour is not None:
+            self.solution_sharing(tour)
 
         self.params = CpoParameters()
         if time_limit != None:
@@ -62,14 +67,42 @@ class CP():
                         'solve_time': self.msol.get_solve_time(), 
                         'status': status}
 
-        return Result(self.msol.get_objective_value(), statistics)
+        #self.msol.print_solution()
+        cur_xs = np.array([self.msol.get_value('x_{}'.format(i)).start for i in range(self.N)])
+        tour = list(np.argsort(cur_xs))
+
+
+        return Result(self.msol.get_objective_value(), statistics, tour)
     
-    def resume(self, time_limit=30):
+    def resume(self, time_limit=30, tour=None):
         if self.msol == None:
             return self.msol.get_objective_value()
 
-        cur_xs = [self.msol.get_value('x_{}'.format(i)) for i in range(self.N)]
+        if tour is None:
+            cur_xs = [self.msol.get_value('x_{}'.format(i)) for i in range(self.N)]
 
+            self.new_model = CpoModel()
+            self.new_x = [self.new_model.interval_var(name="x_{}".format(i), size=0) for i in range(self.N+1)]
+            self.new_seq = sequence_var(self.new_x, name="seq")
+
+            self.new_model.add(self.new_model.no_overlap(self.new_seq,  distance_matrix=self.dist, is_direct=True))
+            self.new_model.add(self.new_model.first(self.new_seq, self.new_x[0]))
+            self.new_model.add(self.new_model.last(self.new_seq, self.new_x[self.N]))
+
+            self.new_model.add(self.new_model.minimize(max([end_of(self.new_x[i]) for i in range(self.N+1)])))
+
+            stp = self.new_model.create_empty_solution()
+
+            for i in range(self.N):
+                stp.add_interval_var_solution(
+                    self.new_x[i], start=cur_xs[i].start, end=cur_xs[i].end, size=cur_xs[i].size
+                )
+            self.new_model.set_starting_point(stp)
+            self.model = self.new_model
+
+        return self.solve(time_limit=time_limit, tour=tour)
+
+    def solution_sharing(self, tour):
         self.new_model = CpoModel()
         self.new_x = [self.new_model.interval_var(name="x_{}".format(i), size=0) for i in range(self.N+1)]
         self.new_seq = sequence_var(self.new_x, name="seq")
@@ -81,24 +114,26 @@ class CP():
         self.new_model.add(self.new_model.minimize(max([end_of(self.new_x[i]) for i in range(self.N+1)])))
 
         stp = self.new_model.create_empty_solution()
-        for i in range(self.N):
+
+        assert tour[0] == 0, "Tour has to start from node 0 for solution sharing"
+        start = 0
+        for i in range(self.N-1):
             stp.add_interval_var_solution(
-                self.new_x[i], start=cur_xs[i].start, end=cur_xs[i].end, size=cur_xs[i].size
-            )
+                self.new_x[tour[i]], start=start, end=start, size=0)
+            start += self.dist[tour[i]][tour[i+1]]
+
+        stp.add_interval_var_solution(
+            self.new_x[tour[-1]], start=start, end=start, size=0)
         self.new_model.set_starting_point(stp)
-
-
         self.model = self.new_model
-        return self.solve(time_limit=time_limit)
-
 
 if __name__ == "__main__":
-    cp = CP('./instances/bays29.tsp')
+    cp = CP('./instances/d1655.tsp', verbose=0)
     cp.build()
-    obj = cp.solve()
-    print(obj)
-    obj = cp.resume()
-    print(obj)
+    result = cp.solve(time_limit=10)
+    print(result.objVal)
+    result = cp.resume(tour=result.tour, time_limit=10)
+    print(result.objVal)
 
     """
     instance = Instance_CP('./instances/ulysses16.tsp')

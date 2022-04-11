@@ -45,10 +45,13 @@ class MIP():
 
         self.build_complete = 1
 
-    def solve(self, time_limit=None):
+    def solve(self, time_limit=None, tour=None):
         assert self.build_complete == 1, \
             "Model is not initialized yet. Run MIP.build() first."
-        
+
+        if tour is not None:
+            self.solution_sharing(tour)
+
         if time_limit != None:
             self.model.setParam('TimeLimit', time_limit)
 
@@ -62,11 +65,33 @@ class MIP():
         statistics = {'NumConstrs': self.model.NumConstrs, 
                         'solve_time': self.model.Runtime, 
                         'status': self.model.Status}
- 
-        return Result(objVal, statistics)
 
-    def resume(self, time_limit=None):
-        return self.solve(time_limit=time_limit)
+        if self.model.objVal != float('inf'):
+            # Found a feasible solution
+
+            tour = []
+            i = 0 # tour starts from node 0
+            tour.append(i)
+            while len(tour) < self.dim:
+                j = [j for j in range(self.dim) if self.x[i,j].X > 0.5][0]
+                tour.append(j)
+                i = j
+        else:
+            tour = None
+ 
+        return Result(objVal, statistics, tour)
+
+    def resume(self, time_limit=None, tour=None):
+        return self.solve(time_limit=time_limit, tour=tour)
+    
+    def solution_sharing(self, tour):
+        for i in range(self.dim-1):
+            for j in range(self.dim-1):
+                self.x[tour[i],j].start = 0
+            self.x[tour[i], tour[i+1]].start = 1
+        for j in range(self.dim-1):
+            self.x[tour[-1],j].start = 0
+        self.x[tour[-1], tour[0]].start = 1
 
 def subtourelim(model, where):
     if where == GRB.Callback.MIPSOL:
@@ -99,14 +124,15 @@ def subtour(edges, N):
     return None
 
 if __name__ == "__main__":
-    mip = MIP('./instances/bayg29.tsp')
+    mip = MIP('./instances/bays29.tsp')
     #print(mip.build)
     mip.build()
     #print("1st try")
-    obj = mip.solve()
-    print(obj)
+    result = mip.solve()
+    print(result.objVal)
+    print(result.tour)
     #print("2nd try")
-    #mip.solve()
+    #mip.resume(tour=result.tour)
     #print("3rd try")
     #mip.solve()
     #print("4th try")

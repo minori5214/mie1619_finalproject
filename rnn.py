@@ -49,6 +49,93 @@ class RNN(nn.Module):
         return hidden
 
 
+class RNN_Switching():
+    def __init__(self, algo_names=['MIP', 'CP', 'ALNS'], delta_t=5, time_horizon=3, T=300, 
+                    hidden_dim=5, n_layers=3,
+                    lr=0.001, batch_size=16, max_iter=500, X_test=[], y_test=[], model_name='rnn_switching'):
+
+        self.algo_names = algo_names
+        self.delta_t = delta_t
+        self.time_horizon = time_horizon
+        self.T = T
+
+        self.hidden_dim = hidden_dim
+        self.n_layers = n_layers
+
+        self.lr = lr
+        self.batch_size = batch_size
+        self.max_iter = max_iter
+
+        self.model = RNN(len(algo_names), len(algo_names),
+                            hidden_dim,
+                            n_layers).to(device)
+
+        self.optimizer = optim.Adam(self.model.parameters(),
+                                    lr=self.lr)
+        self.criterion = nn.CrossEntropyLoss()
+
+        self.X_test = X_test
+        self.y_test = y_test
+
+        if not os.path.exists('./models'):
+            os.mkdir('./models')
+        self.model_path = os.path.join('./models', model_name) + '.pth'
+
+    def fit(self, X, y):
+        assert X.shape[1] == len(self.algo_names) * self.time_horizon, \
+            "Train data size does not match with the model size"
+
+        train_losses = []
+        test_losses = []
+        train_accs = []
+        test_accs = []
+        for e in range(self.max_iter):
+            self.model.train()
+            epoch_loss = 0
+            correct_num = 0
+
+            for i in range(0, len(y), self.batch_size):
+                X_batch = X[i:min(i+self.batch_size, len(y)-1), :].reshape(-1, self.time_horizon, len(self.algo_names))
+                X_batch = torch.from_numpy(X_batch).float().to(device)
+                #y_batch = torch.from_numpy(y[i:min(i+self.batch_size, len(y)-1), :]).float().to(device)
+
+                self.optimizer.zero_grad()
+                output, hidden = self.model(X_batch)
+
+                print(output)
+                """
+                #y_pred_logsoftmax = torch.log_softmax(output[2::self.time_horizon], dim = 1)
+                _, y_pred = torch.max(y_pred_logsoftmax, dim = 1)
+                
+                loss = self.criterion(y_pred_logsoftmax, y_batch)
+                loss.backward()
+                self.optimizer.step()
+
+                correct_num += (y_pred == y_batch).float().sum()
+                epoch_loss += loss.item()
+                """
+            """
+            train_acc = torch.round(correct_num / len(y) * 100)
+
+            if len(self.X_test) != 0 and len(self.y_test) != 0:
+                test_loss, test_acc = self.score(self.X_test, self.y_test)
+
+            if e % 10 == 0:
+                if len(self.X_test) != 0 and len(self.y_test) != 0:
+                    print("Episode {}: train_loss: {:.3f}, train_acc: {:.3f}, test_loss: {:.3f}, test_acc: {:.3f}".format(e, epoch_loss, train_acc, test_loss, test_acc))
+                    test_losses.append(test_loss.item())
+                    test_accs.append(test_acc.item())
+                else:
+                    print("Episode {}: train_loss: {:.3f}, train_acc: {:.3f}".format(e, epoch_loss, train_acc))
+
+            train_losses.append(epoch_loss)
+            train_accs.append(train_acc.item())
+
+            torch.save(self.model.state_dict(), self.model_path)
+            """
+        
+        return train_losses, train_accs, test_losses, test_accs
+
 class RNN_Agent():
     def __init__(self, algo_names=['MIP', 'CP', 'ALNS'], delta_t=5, time_horizon=3, T=300, 
                     hidden_dim=5, n_layers=3,
@@ -132,7 +219,7 @@ class RNN_Agent():
         #print(best_algo, "is selected")
 
         # Run the selected algorithm for the rest of the time
-        remain = self.T-self.delta_t*self.time_horizon*len(self.base)
+        remain = self.T-self.t
         result = self.base[best_algo].resume(remain)
 
         objVal = result.objVal
@@ -143,7 +230,7 @@ class RNN_Agent():
             solve_time = remain
             status = 9
 
-        return objVal, solve_time+self.delta_t*self.time_horizon*len(self.base), status, best_algo
+        return objVal, solve_time+self.t, status, best_algo
     
     def fit(self, X, y):
         assert X.shape[1] == len(self.algo_names) * self.time_horizon, \
@@ -252,13 +339,16 @@ if __name__ == "__main__":
     T = 300
     time_horizon = 3
 
-    X = np.load('X_t{}_T{}.npy'.format(delta_t, T))
-    y = np.load('y_t{}_T{}.npy'.format(delta_t, T))
+    X = np.load('X_t{}_T{}_h3.npy'.format(delta_t, T))
+    y = np.load('y_t{}_T{}_h3.npy'.format(delta_t, T))
 
     dataset = Dataset(X, y)
     X_train, X_test, y_train, y_test = dataset.train_test_split()
-    rnn = RNN_Agent(X_test=X_test, y_test=y_test)
+    #rnn = RNN_Agent(X_test=X_test, y_test=y_test)
+    rnn_switching = RNN_Switching()
 
-    rnn.fit(X_train, y_train)
-    objVal = rnn.run('./instances/gr48.tsp')
-    print(objVal)
+    rnn_switching.fit(X_train, y_train)
+
+    #rnn.fit(X_train, y_train)
+    #objVal = rnn.run('./instances/gr48.tsp')
+    #print(objVal)

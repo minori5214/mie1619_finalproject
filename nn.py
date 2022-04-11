@@ -116,7 +116,7 @@ class NN_Agent():
         #print(best_algo, "is selected")
 
         # Run the selected algorithm for the rest of the time
-        remain = self.T-self.delta_t*self.time_horizon*len(self.base)
+        remain = self.T-self.t
         result = self.base[best_algo].resume(remain)
 
         objVal = result.objVal
@@ -127,7 +127,7 @@ class NN_Agent():
             solve_time = remain
             status = 9
 
-        return objVal, solve_time+self.delta_t*self.time_horizon*len(self.base), status, best_algo
+        return objVal, solve_time+self.t, status, best_algo
     
     def fit(self, X, y):
         assert X.shape[1] == len(self.algo_names) * self.time_horizon, \
