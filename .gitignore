@@ -9,3 +9,8 @@
 /test_instances/
 *.npy
 /models/
+
+
+!/ALNS/*
+/ALNS/
+!/ALNS/.gitkeep
