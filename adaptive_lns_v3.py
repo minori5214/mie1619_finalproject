@@ -133,6 +133,8 @@ class TspState_dist(State):
         """
         The objective function is simply the sum of all individual edge lengths.
         """
+        #print(self.nodes)
+        #print(self.edges)
 
         return sum([node[1][self.edges[node][0]] for node in self.nodes])
 
@@ -284,12 +286,20 @@ class ALNS_Agent():
         nodes = self.cur_state.nodes
         edges = self.cur_state.edges
         tour = []
-        i = 1
-        tour.append(i-1)
-        while len(tour) < len(nodes):
-            j = edges[nodes[i-1]][0]
-            tour.append(j-1)
-            i = j
+        if self.cur_state.__class__.__name__ == 'TspState_dist':
+            i = 0
+            tour.append(i)
+            while len(tour) < len(nodes):
+                j = edges[nodes[i]][0]
+                tour.append(j)
+                i = j
+        elif self.cur_state.__class__.__name__ == 'TspState':
+            i = 1
+            tour.append(i-1)
+            while len(tour) < len(nodes):
+                j = edges[nodes[i-1]][0]
+                tour.append(j-1)
+                i = j
         
         statistics = {'solution': deepcopy(self.cur_state), 
                         'status': 9, 
@@ -309,7 +319,7 @@ class ALNS_Agent():
 
 
 if __name__ == "__main__":
-    alns_agent = ALNS_Agent('./instances/ali535.tsp')
+    alns_agent = ALNS_Agent('./instances/att532.tsp')
     #alns_agent.instance.optimal_tour('./instances/xqf131.opt.tour')
 
     alns_agent.build()

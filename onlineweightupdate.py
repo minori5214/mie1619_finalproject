@@ -34,7 +34,6 @@ class OnlineWeightUpdate():
             self.base_id[k] = 'ALNS'
         
         weight = [1/len(self.base)]*len(self.base) # weights are set equal
-        epsilon = 0.000001
         best_result = Result(float('inf'), None, None)
         num_iter = self.T // self.t
         solve_time = 0

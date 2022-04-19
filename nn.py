@@ -40,7 +40,7 @@ class FCN(nn.Module):
 
 
 class NN_Agent():
-    def __init__(self, algo_names=['MIP', 'CP', 'ALNS'], delta_t=5, time_horizon=3, T=300, 
+    def __init__(self, algo_names=['MIP', 'CP', 'ALNS'], t=90, delta_t=5, time_horizon=6, T=600, 
                     lr=0.001, batch_size=32, max_iter=200, X_test=[], y_test=[], model_name='nn'):
         """
         It solves the instance for "delta_t * time_horizon" [sec] by each method.
@@ -52,6 +52,7 @@ class NN_Agent():
         self.delta_t = delta_t
         self.time_horizon = time_horizon
         self.T = T
+        self.t=t
 
         self.lr = lr
         self.batch_size = batch_size
@@ -70,6 +71,13 @@ class NN_Agent():
             os.mkdir('./models')
         self.model_path = os.path.join('./models', model_name) + '.pth'
     
+    def load_model(self):
+        if os.path.exists(self.model_path):
+            self.model.load_state_dict(torch.load(self.model_path))
+            print("Successfully loaded the model!")
+        else:
+            print("Model was not found. Please train the model from scratch")
+
     def run(self, instance_path):
         self.instance_path = instance_path
 
@@ -132,6 +140,10 @@ class NN_Agent():
     def fit(self, X, y):
         assert X.shape[1] == len(self.algo_names) * self.time_horizon, \
             "Train data size does not match with the model size"
+        
+        if os.path.exists(self.model_path):
+            self.load_model()
+            return
         
         self.model.train()
 

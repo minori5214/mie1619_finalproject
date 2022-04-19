@@ -128,12 +128,12 @@ class CP():
         self.model = self.new_model
 
 if __name__ == "__main__":
-    cp = CP('./instances/d1655.tsp', verbose=0)
+    cp = CP('./instances/d657.tsp', verbose=0)
     cp.build()
-    result = cp.solve(time_limit=10)
-    print(result.objVal)
-    result = cp.resume(tour=result.tour, time_limit=10)
-    print(result.objVal)
+    result = cp.solve(time_limit=600)
+    print(result.objVal, result.statistics['status'])
+    #result = cp.resume(tour=result.tour, time_limit=10)
+    #print(result.objVal)
 
     """
     instance = Instance_CP('./instances/ulysses16.tsp')
